@@ -1,6 +1,8 @@
 <?php
 namespace Xety\Cake3Upload\Model\Behavior;
 
+use Cake\Log\Log;
+
 use Cake\Core\Configure;
 use Cake\Event\Event;
 use Cake\ORM\TableRegistry;
@@ -179,9 +181,11 @@ class UploadBehavior extends Behavior
         $dir = new Directory($basePath.$directoryPath);
         $ftp->create($dir, $dirOptions);
 
+        Log::debug("callback WILL run on :".date('H:i:s'));
         $options = array(
             FTP::NON_BLOCKING  => true,     // Whether to deal with a callback while uploading
             FTP::NON_BLOCKING_CALLBACK => function() { 
+                Log::debug("callback run on :".date('H:i:s'));
                 return true; 
             }, // Callback to execute
             FTP::START_POS     => 0,         // File pointer to start uploading from
