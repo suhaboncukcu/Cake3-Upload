@@ -10,27 +10,6 @@ use Cake\Filesystem\File;
 use Cake\Filesystem\Folder;
 use Cake\ORM\Behavior;
 use Cake\ORM\Entity;
-use Touki\FTP\Connection\Connection;
-use Touki\FTP\Connection\AnonymousConnection;
-use Touki\FTP\Connection\SSLConnection;
-
-use Touki\FTP\FTP;
-use Touki\FTP\FTPWrapper;
-use Touki\FTP\PermissionsFactory;
-use Touki\FTP\FilesystemFactory;
-use Touki\FTP\WindowsFilesystemFactory;
-use Touki\FTP\DownloaderVoter;
-use Touki\FTP\UploaderVoter;
-use Touki\FTP\CreatorVoter;
-use Touki\FTP\DeleterVoter;
-use Touki\FTP\Manager\FTPFilesystemManager;
-use Touki\FTP\Model\File as Fil;
-use Touki\FTP\Model\Directory;
-use Touki\FTP\FTPFactory;
-
-
-
-
 
 class UploadBehavior extends Behavior
 {
@@ -144,63 +123,29 @@ class UploadBehavior extends Behavior
 
     public function ftpUpload()
     {
-        $host = Configure::read('Ftp.general.host');
-        $password = Configure::read('Ftp.general.password');
-        $username = Configure::read('Ftp.general.username');
-        $basePath = Configure::read('Ftp.general.remoteBasePath');
 
-
-        $connection = new Connection($host, $username, $password, $port = 21, $timeout = 90, $passive = false);
-        $connection->open();
-
-        
-        $factory = new FTPFactory;
-        $ftp = $factory->build($connection);
-        $wrapper = $factory->getWrapper();
-        $wrapper->pasv(true);
-        $manager = $factory->getManager();
-        $dlVoter = $factory->getDownloaderVoter();
-        $ulVoter = $factory->getUploaderVoter();
-        $clVoter = $factory->getCreatorVoter();
-        $dlVoter = $factory->getDeleterVoter();
-
-
-        
-
-        //$basePath = '/player/foxuploads';
         $directoryPath = explode('/',$this->finalPath);
         unset($directoryPath[sizeof($directoryPath) -1]);
         $directoryPath = implode('/', $directoryPath);
 
-        
-        
-        
-        $dirOptions = array(
-            FTP::RECURSIVE => true
-        );
-        $dir = new Directory($basePath.$directoryPath);
-        $ftp->create($dir, $dirOptions);
+        $ftpAdapter = new League\Flysystem\Adapter\Ftp([
+            'host' => Configure::read('Ftp.general.host'),
+            'username' => Configure::read('Ftp.general.username'),
+            'password' => Configure::read('Ftp.general.password'),
+            'port' => Configure::read('Ftp.general.port'),
+            'root' => Configure::read('Ftp.general.remoteBasePath'),
+            'passive' => Configure::read('Ftp.general.passive'),
+            'ssl' => Configure::read('Ftp.general.ssl'),
+            'timeout' => Configure::read('Ftp.general.timeout'),
+        ]);
 
-        Log::debug("callback WILL run on :".date('H:i:s'));
-        $options = array(
-            FTP::NON_BLOCKING  => true,     // Whether to deal with a callback while uploading
-            FTP::NON_BLOCKING_CALLBACK => function() { 
-                Log::debug("callback run on :".date('H:i:s'));
-                return true; 
-            }, // Callback to execute
-            FTP::START_POS     => 0,         // File pointer to start uploading from
-            FTP::TRANSFER_MODE => FTP_BINARY // Transfer Mode
-        );
-        $file = new Fil($basePath.$this->finalPath);
+        $ftp = new League\Flysystem\Filesystem($ftpAdapter);
+        $manager = new League\Flysystem\MountManager([
+            'ftp' => $ftp,
+        ]);
 
-    
-        $k = $ftp->upload($file, 
-                    WWW_ROOT. $this->finalPath, 
-                    $options);
-
-        if($k) {
-            return $k;
-        }
+        $k = $manager->write($basePath.$this->finalPath, WWW_ROOT. $this->finalPath);
+        return $k;
     }
 
     /**
