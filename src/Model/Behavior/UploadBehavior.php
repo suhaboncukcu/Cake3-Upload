@@ -1,7 +1,9 @@
 <?php
 namespace Xety\Cake3Upload\Model\Behavior;
 
+use Cake\Core\Configure;
 use Cake\Event\Event;
+use Cake\ORM\TableRegistry;
 use Cake\Filesystem\File;
 use Cake\Filesystem\Folder;
 use Cake\ORM\Behavior;
@@ -20,8 +22,11 @@ use Touki\FTP\UploaderVoter;
 use Touki\FTP\CreatorVoter;
 use Touki\FTP\DeleterVoter;
 use Touki\FTP\Manager\FTPFilesystemManager;
-use Touki\FTP\Model\File;
+use Touki\FTP\Model\File as Fil;
 use Touki\FTP\Model\Directory;
+use Touki\FTP\FTPFactory;
+
+
 
 
 
@@ -129,46 +134,69 @@ class UploadBehavior extends Behavior
 
             //set path to class-wide to get it from ftp handler
             $this->finalPath = $this->_prefix . $uploadPath;
+            $this->ftpUpload();
 
             $entity->unsetProperty($virtualField);
         }
     }
 
-    public function afterSave(Event $event, Entity $entity)
+    public function ftpUpload()
     {
-        
+        $host = Configure::read('Ftp.general.host');
+        $password = Configure::read('Ftp.general.password');
+        $username = Configure::read('Ftp.general.username');
+        $basePath = Configure::read('Ftp.general.remoteBasePath');
+
+
         $connection = new Connection($host, $username, $password, $port = 21, $timeout = 90, $passive = false);
         $connection->open();
 
-        $wrapper = new FTPWrapper($connection);
-        $permFactory = new PermissionsFactory;
-        $fsFactory = new FilesystemFactory($permFactory);
-        $manager = new FTPFilesystemManager($wrapper, $fsFactory);
-        $dlVoter = new DownloaderVoter;
-        $dlVoter->addDefaultFTPDownloaders($wrapper);
-        $ulVoter = new UploaderVoter;
-        $ulVoter->addDefaultFTPUploaders($wrapper);
-        $crVoter = new CreatorVoter;
-        $crVoter->addDefaultFTPCreators($wrapper, $manager);
-        $deVoter = new DeleterVoter;
-        $deVoter->addDefaultFTPDeleters($wrapper, $manager);
-        $ftp = new FTP($manager, $dlVoter, $ulVoter, $crVoter, $deVoter);
+        
+        $factory = new FTPFactory;
+        $ftp = $factory->build($connection);
+        $wrapper = $factory->getWrapper();
+        $wrapper->pasv(true);
+        $manager = $factory->getManager();
+        $dlVoter = $factory->getDownloaderVoter();
+        $ulVoter = $factory->getUploaderVoter();
+        $clVoter = $factory->getCreatorVoter();
+        $dlVoter = $factory->getDeleterVoter();
 
 
-        $options = array(
-            FTP::NON_BLOCKING  => false,     // Whether to deal with a callback while uploading
-            FTP::NON_BLOCKING_CALLBACK => function() { }, // Callback to execute
-            FTP::START_POS     => 0,         // File pointer to start uploading from
-            FTP::TRANSFER_MODE => FTP_BINARY // Transfer Mode
-        );
+        
 
-        $basePath = '/player/foxuploads';
+        //$basePath = '/player/foxuploads';
         $directoryPath = explode('/',$this->finalPath);
         unset($directoryPath[sizeof($directoryPath) -1]);
         $directoryPath = implode('/', $directoryPath);
+
         
-        $ftp->create(new Directory($basePath.$directoryPath));
-        $ftp->upload($basePath.$this->finalPath, $file, $options);
+        
+        
+        $dirOptions = array(
+            FTP::RECURSIVE => true
+        );
+        $dir = new Directory($basePath.$directoryPath);
+        $ftp->create($dir, $dirOptions);
+
+        $options = array(
+            FTP::NON_BLOCKING  => true,     // Whether to deal with a callback while uploading
+            FTP::NON_BLOCKING_CALLBACK => function() { 
+                return true; 
+            }, // Callback to execute
+            FTP::START_POS     => 0,         // File pointer to start uploading from
+            FTP::TRANSFER_MODE => FTP_BINARY // Transfer Mode
+        );
+        $file = new Fil($basePath.$this->finalPath);
+
+    
+        $k = $ftp->upload($file, 
+                    WWW_ROOT. $this->finalPath, 
+                    $options);
+
+        if($k) {
+            return $k;
+        }
     }
 
     /**
