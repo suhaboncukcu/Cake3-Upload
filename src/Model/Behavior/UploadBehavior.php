@@ -116,7 +116,7 @@ class UploadBehavior extends Behavior
             //set path to class-wide to get it from ftp handler
             $this->finalPath = $this->_prefix . $uploadPath;
             if($this->ftpUpload()) {
-                $entity->set(Configure::read('Ftp.general.changepath').$this->finalPath);
+                $entity->set($field, Configure::read('Ftp.general.changepath').$this->finalPath);
             }
 
             $entity->unsetProperty($virtualField);
