@@ -115,7 +115,9 @@ class UploadBehavior extends Behavior
 
             //set path to class-wide to get it from ftp handler
             $this->finalPath = $this->_prefix . $uploadPath;
-            $this->ftpUpload();
+            if($this->ftpUpload()) {
+                $entity->set(Configure::read('Ftp.general.changepath').$this->finalPath);
+            }
 
             $entity->unsetProperty($virtualField);
         }
@@ -123,12 +125,7 @@ class UploadBehavior extends Behavior
 
     public function ftpUpload()
     {
-
-        $directoryPath = explode('/',$this->finalPath);
-        unset($directoryPath[sizeof($directoryPath) -1]);
-        $directoryPath = implode('/', $directoryPath);
-
-        $ftpAdapter = new League\Flysystem\Adapter\Ftp([
+        $ftpAdapter = new \League\Flysystem\Adapter\Ftp([
             'host' => Configure::read('Ftp.general.host'),
             'username' => Configure::read('Ftp.general.username'),
             'password' => Configure::read('Ftp.general.password'),
@@ -139,12 +136,11 @@ class UploadBehavior extends Behavior
             'timeout' => Configure::read('Ftp.general.timeout'),
         ]);
 
-        $ftp = new League\Flysystem\Filesystem($ftpAdapter);
-        $manager = new League\Flysystem\MountManager([
-            'ftp' => $ftp,
-        ]);
+        $ftp = new \League\Flysystem\Filesystem($ftpAdapter);
 
-        $k = $manager->write($basePath.$this->finalPath, WWW_ROOT. $this->finalPath);
+        $stream = fopen(WWW_ROOT. $this->finalPath, 'r+');
+        $k = $ftp->writeStream(trim($this->finalPath, '/'), $stream);
+
         return $k;
     }
 
