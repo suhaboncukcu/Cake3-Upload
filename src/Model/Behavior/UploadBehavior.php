@@ -6,6 +6,24 @@ use Cake\Filesystem\File;
 use Cake\Filesystem\Folder;
 use Cake\ORM\Behavior;
 use Cake\ORM\Entity;
+use Touki\FTP\Connection\Connection;
+use Touki\FTP\Connection\AnonymousConnection;
+use Touki\FTP\Connection\SSLConnection;
+
+use Touki\FTP\FTP;
+use Touki\FTP\FTPWrapper;
+use Touki\FTP\PermissionsFactory;
+use Touki\FTP\FilesystemFactory;
+use Touki\FTP\WindowsFilesystemFactory;
+use Touki\FTP\DownloaderVoter;
+use Touki\FTP\UploaderVoter;
+use Touki\FTP\CreatorVoter;
+use Touki\FTP\DeleterVoter;
+use Touki\FTP\Manager\FTPFilesystemManager;
+use Touki\FTP\Model\File;
+use Touki\FTP\Model\Directory;
+
+
 
 class UploadBehavior extends Behavior
 {
@@ -41,6 +59,12 @@ class UploadBehavior extends Behavior
      * @var bool|string
      */
     protected $_defaultFile = false;
+
+    /**
+     * the path of ofile uploaded
+     * @var string
+     */
+    public $finalPath;
 
     /**
      * Check if there is some files to upload and modify the entity before
@@ -103,8 +127,48 @@ class UploadBehavior extends Behavior
                 $entity->set($field, $this->_prefix . $uploadPath);
             }
 
+            //set path to class-wide to get it from ftp handler
+            $this->finalPath = $this->_prefix . $uploadPath;
+
             $entity->unsetProperty($virtualField);
         }
+    }
+
+    public function afterSave(Event $event, Entity $entity)
+    {
+        
+        $connection = new Connection($host, $username, $password, $port = 21, $timeout = 90, $passive = false);
+        $connection->open();
+
+        $wrapper = new FTPWrapper($connection);
+        $permFactory = new PermissionsFactory;
+        $fsFactory = new FilesystemFactory($permFactory);
+        $manager = new FTPFilesystemManager($wrapper, $fsFactory);
+        $dlVoter = new DownloaderVoter;
+        $dlVoter->addDefaultFTPDownloaders($wrapper);
+        $ulVoter = new UploaderVoter;
+        $ulVoter->addDefaultFTPUploaders($wrapper);
+        $crVoter = new CreatorVoter;
+        $crVoter->addDefaultFTPCreators($wrapper, $manager);
+        $deVoter = new DeleterVoter;
+        $deVoter->addDefaultFTPDeleters($wrapper, $manager);
+        $ftp = new FTP($manager, $dlVoter, $ulVoter, $crVoter, $deVoter);
+
+
+        $options = array(
+            FTP::NON_BLOCKING  => false,     // Whether to deal with a callback while uploading
+            FTP::NON_BLOCKING_CALLBACK => function() { }, // Callback to execute
+            FTP::START_POS     => 0,         // File pointer to start uploading from
+            FTP::TRANSFER_MODE => FTP_BINARY // Transfer Mode
+        );
+
+        $basePath = '/player/foxuploads';
+        $directoryPath = explode('/',$this->finalPath);
+        unset($directoryPath[sizeof($directoryPath) -1]);
+        $directoryPath = implode('/', $directoryPath);
+        
+        $ftp->create(new Directory($basePath.$directoryPath));
+        $ftp->upload($basePath.$this->finalPath, $file, $options);
     }
 
     /**

@@ -18,7 +18,8 @@
     ],
     "require": {
         "php": ">=5.4.16",
-        "cakephp/orm": "3.*"
+        "cakephp/orm": "3.*",
+        "touki/ftp": "^1.2"
     },
     "require-dev": {
         "cakephp/cakephp": "~3.0",
